@@ -12,6 +12,13 @@
 
 ---
 
+### 🧭 **Quick Navigation**
+
+-   **Language**: [🇮🇩 Bahasa Indonesia](#-versi-bahasa-indonesia) | [🇬🇧 English](#-english-version)
+-   **Environment**: [🛠️ Development (Local)](#mode-development-pengembangan-️) | [🚀 Production](#mode-production-produksi-)
+
+---
+
 ## 🇮🇩 Versi Bahasa Indonesia
 
 ### 📋 Persyaratan
