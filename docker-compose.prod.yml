@@ -1,0 +1,123 @@
+version: "3.8"
+
+services:
+  php:
+    build: .docker/php
+    volumes:
+      - .:/var/www
+      - ./storage/logs/supervisor:/var/log/supervisor
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+    environment:
+      - VIRTUAL_HOST=a${VIRTUAL_HOST}
+      - LETSENCRYPT_HOST=${LETSENCRYPT_HOST}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+      - VIRTUAL_PORT=80
+    expose:
+      - "80"
+    networks:
+      - proxy-tier
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: mysql:8.1
+    restart: always
+    ports:
+    - "3306:3306"
+    volumes:
+      - .docker/db/data:/var/lib/mysql
+      - .docker/logs:/var/log/mysql
+      - .docker/db/my.cnf:/etc/mysql/conf.d/my.cnf
+      - .docker/db/sql:/docker-entrypoint-initdb.d
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    networks:
+      - proxy-tier
+
+  redis:
+    image: redis:latest
+    command: redis-server --appendonly yes
+    volumes:
+      - .docker/redis/data:/data
+    ports:
+      - 6379:6379
+    networks:
+      - proxy-tier
+
+  mail:
+    image: axllent/mailpit:latest
+    ports:
+      - 8025:8025
+      - 1025:1025
+    networks:
+      - proxy-tier
+
+  soketi:
+    image: quay.io/soketi/soketi:latest-16-alpine
+    container_name: soketi
+    ports:
+      - 6001:6001
+    environment:
+      - VIRTUAL_HOST=soketi.${VIRTUAL_HOST}
+      - LETSENCRYPT_HOST=soketi.${LETSENCRYPT_HOST}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+      - SOKETI_DEBUG=0
+      - SOKETI_PORT=6001
+      - SOKETI_METRICS_SERVER_PORT=9601
+      - SOKETI_DEFAULT_APP_ID=app
+      - SOKETI_DEFAULT_APP_KEY=app-key
+      - SOKETI_DEFAULT_APP_SECRET=app-secret
+      - SOKETI_CORS_ALLOWED_ORIGINS=*
+    depends_on:
+      - php
+    networks:
+      - proxy-tier
+
+  nginx-proxy:
+    container_name: nginx-proxy
+    image: jwilder/nginx-proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - nginx_certs:/etc/nginx/certs
+      - nginx_vhost:/etc/nginx/vhost.d
+      - nginx_html:/usr/share/nginx/html
+    networks:
+      - proxy-tier
+
+  letsencrypt:
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    restart: always
+    depends_on:
+      - nginx-proxy
+    environment:
+      - NGINX_PROXY_CONTAINER=nginx-proxy
+      - DEFAULT_EMAIL=yogameleniawan@gmail.com
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - nginx_certs:/etc/nginx/certs
+      - nginx_vhost:/etc/nginx/vhost.d
+      - nginx_html:/usr/share/nginx/html
+    networks:
+      - proxy-tier
+
+volumes:
+  nginx_certs:
+  nginx_vhost:
+  nginx_html:
+  redis_data:
+
+networks:
+  proxy-tier:
+    name: proxy-tier
+    driver: bridge
+    external: false
